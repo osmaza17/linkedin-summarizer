@@ -1,0 +1,31 @@
+{
+  "manifest_version": 3,
+  "name": "LinkedIn Harvester → LinkedIn Summarizer",
+  "version": "0.1",
+  "description": "Cosecha los posts de una lista de personas de LinkedIn (abriendo su actividad reciente) y los manda al servidor local de LinkedIn Summarizer (3002), que los filtra y archiva.",
+  "permissions": ["tabs", "storage"],
+  "host_permissions": [
+    "https://www.linkedin.com/*",
+    "http://localhost:3002/*",
+    "http://127.0.0.1:3002/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://www.linkedin.com/in/*/recent-activity/*"],
+      "js": ["content_linkedin.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["http://localhost:3002/*", "http://127.0.0.1:3002/*"],
+      "js": ["content_feed.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Cosechar LinkedIn",
+    "default_popup": "popup.html"
+  }
+}
