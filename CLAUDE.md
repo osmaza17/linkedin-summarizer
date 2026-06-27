@@ -100,7 +100,8 @@ linkedin-summarizer/          # app independiente (hermana de youtube-summarizer
 │   ├── content_feed.js       # en el feed local: ?harvest=1 → dispara la cosecha
 │   ├── popup.html / popup.js # botón "Cosechar ahora" + URL del servidor + progreso
 ├── scripts/
-│   └── loadtest.py           # prueba de carga: N posts sintéticos → /api/summarize-post
+│   ├── loadtest.py           # prueba de carga: N posts sintéticos → /api/summarize-post
+│   └── backfill_images.py    # rellena post_image de posts ya guardados (vía embed, sin re-cosechar)
 └── reports/                  # generadas: <slug>.html + index.json (gitignored)
 ```
 
@@ -192,8 +193,9 @@ prompt de clasificación. Lo invoca `classifier.classify` cuando `backend=="clau
   `motivo`/`categoria` se siguen guardando en el índice para auditar, pero no se pintan).
 - Índice keyed por **`post_id`**: `load_index_map`, `resolve_filename` (slug del título,
   reusa nombre previo, resuelve colisiones `-2/-3`), `write_post_newsletter`,
-  `index_entry(post, filename, keep=True)` (añade `keep`/`motivo`/`categoria` a los campos
-  de siempre), **`rejected_entry(post)`** (ficha mínima de descartado: `keep:false`, sin
+  `index_entry(post, filename, keep=True)` (añade `keep`/`motivo`/`categoria`/`post_image`
+  a los campos de siempre), **`rejected_entry(post)`** (ficha mínima de descartado:
+  `keep:false`, sin
   `html`, con motivo), `update_index` (upsert por post_id, orden fecha desc, **nunca
   borra**, **preserva `read`**).
 
@@ -202,13 +204,23 @@ prompt de clasificación. Lo invoca `classifier.classify` cuando `backend=="clau
 - **`date_from_post_id(post_id)`** (clave): la fecha **fiable** de un post. Los ids de
   actividad de LinkedIn **codifican el timestamp** en los bits altos (`id >> 22` = Unix
   ms). Se prefiere a la fecha relativa del DOM (que es imprecisa). Con cordura de rango.
+- **`resolve_post_image(post_id)`**: imagen de **contenido** del post desde el **embed
+  público** de LinkedIn (`…/embed/feed/update/urn:li:activity:{id}`, la misma URL que el
+  iframe del report; accesible **sin login**). Parsea las URLs `media.licdn.com/dms/image/
+  v2/<hash>/<token>/…`: descarta `profile-displayphoto`/`company-logo` (avatar/logos) y
+  prefiere la imagen nativa (`feedshare` > `article` > `videocover` > `image`). Devuelve
+  '' si el post es solo texto o si la descarga falla (nunca lanza). Es la fuente **más
+  fiable** que raspar el DOM; la usa `process_posts` como respaldo y el script de backfill.
 - `normalize_post(raw)`: dict canónico interno (`post_id`, `author`, `author_url`,
-  `author_avatar`, `group_*`, `url`, `published_at` [de `date_from_post_id` o respaldo],
-  `text`, `title` [1ª línea recortada]). None si falta texto o id.
+  `author_avatar`, `post_image` [imagen del **cuerpo** del post, no la foto de perfil;
+  '' si el post no lleva imagen], `group_*`, `url`, `published_at` [de
+  `date_from_post_id` o respaldo], `text`, `title` [1ª línea recortada]). None si falta
+  texto o id.
 - `process_posts(raw_posts, settings, client, model, reports_path)`: deduplica contra el
   índice (incluye los **descartados**, así no se reevalúan) y dentro del lote; **clasifica**
   (`classify_batch`, `backend=settings.get("summary_backend", "claude_code")`); por cada
-  post según el veredicto: `keep:true` → escribe HTML + `index_entry`; `keep:false` →
+  post según el veredicto: `keep:true` → si no trae `post_image` del DOM lo resuelve con
+  `resolve_post_image` (embed), escribe HTML + `index_entry`; `keep:false` →
   `rejected_entry` (sin HTML); `keep is None` → ni guarda ni descarta (reintento futuro).
   `update_index` con guardados + descartados. Devuelve el nº de **guardados**. Propaga
   `FatalAPIError`.
@@ -249,12 +261,18 @@ del dashboard de YouTube para tener **el mismo aspecto**, pero es código separa
 - `src/App.jsx`: shell con barra superior (marca "LinkedIn Summarizer", tema, "Detener
   servidor") y **pestañas Newsletters / Ajustes**. Pasa `apiBase=""` a los componentes
   (mismo origen → fetch a `/api/...`).
-- `src/LinkedInFeed.jsx`: feed de newsletters (agrupado por día, chips de grupo, búsqueda,
-  marcar leído, abre los HTML en `/reports/<slug>.html`). **Incluye el botón "▶ Cosechar
-  LinkedIn"** (en `.li-toolbar`): hace `window.postMessage({type:'LINKEDIN_HARVEST_REQUEST'})`,
+- `src/LinkedInFeed.jsx`: feed de newsletters **homogeneizado con el de YouTube** (mismas
+  clases/estructura: `.feed-head` + `.feed-searchbar`, `.feed-filterbar` con buscadores
+  `FilterSearch` —grupo · autor · día—, `.feed-day-head` en Playfair, `.feed-grid` de
+  `.feed-card`). El área `.feed-thumb` muestra la **imagen del propio post** si la tiene
+  (campo `post_image`, a sangre completa con `object-fit: cover`, clase `.li-post-img`; si
+  la URL falla al cargar cae al banner); si el post **no lleva imagen**, se rellena con un
+  **banner del autor** (avatar/inicial + nombre, clase `.li-thumb`). Marcar leído en la
+  tarjeta; abre los HTML en `/reports/<slug>.html`. **Incluye el botón "▶ Cosechar
+  LinkedIn"** en la cabecera: hace `window.postMessage({type:'LINKEDIN_HARVEST_REQUEST'})`,
   que `content_feed.js` (inyectado en 3002) reenvía al background para arrancar la cosecha
   sin abrir pestaña; escucha `LINKEDIN_HARVEST_STARTED` y, si no hay respuesta en 4 s, avisa
-  de que la extensión no está cargada/recargada (`.li-harvest-msg`).
+  (`.li-harvest-msg`).
 - `src/LinkedInSettings.jsx`: ajustes (personas/grupos, modelo, días, **motor**);
   autoguardado contra `/api/config`.
 - **Tras tocar `web/src/*` hay que recompilar**: `cd web && npm run build` (`server.py`
@@ -271,7 +289,8 @@ del dashboard de YouTube para tener **el mismo aspecto**, pero es código separa
 - **`content_linkedin.js`**: NO actúa solo; solo cosecha al recibir `{action:'harvest'}`.
   `harvest(days, person)` hace scroll progresivo (hasta 25, para por ventana de días o
   3 sin novedades) y `extractPosts` saca de cada update: `post_id` (del data-urn), texto,
-  autor, avatar y **fecha vía `dateFromId`** (id>>22; respaldo `datePost` por fecha
+  autor, avatar, **imagen del cuerpo del post** (`postImage`, excluye la foto de perfil;
+  '' si no hay) y **fecha vía `dateFromId`** (id>>22; respaldo `datePost` por fecha
   relativa). `isReactionOrComment` descarta comentarios/reacciones (heurística por texto,
   multi-idioma ES/EN/FR — imperfecta). **⚠️ TODO lo dependiente del DOM está en la sección
   "EXTRACCIÓN"; si cosecha 0 posts, ahí hay que ajustar los selectores.**
@@ -336,6 +355,11 @@ no resuma; las etiquetas de la UI se renombrarán en la Fase 2.)
   clasificado —guardado **o** descartado— se omite, no se re-paga). Útil si el service
   worker MV3 se suspende a mitad.
 - **`_index_lock`**: toda escritura de `index.json` (worker + set_read) está serializada.
+- **Imagen del post vía embed público**: la miniatura (`post_image`) se resuelve del
+  **embed** (`resolve_post_image`), no solo del DOM cosechado. Es más robusto (no depende
+  de selectores frágiles) y permite **rellenar posts antiguos** sin re-cosechar
+  (`scripts/backfill_images.py`). El embed es público (sin login); si falla o el post es
+  solo texto, la tarjeta cae al banner del autor.
 - **No hay API oficial de LinkedIn** para esto; la cosecha lee el DOM de la sesión propia
   (zona gris de ToS, bajo riesgo de cuenta). Los selectores del DOM son **frágiles**.
 
@@ -360,6 +384,9 @@ no resuma; las etiquetas de la UI se renombrarán en la Fase 2.)
   extensión cargada, sesión de LinkedIn iniciada y Chrome predeterminado).
 - **Probar el pipeline sin la extensión**: `venv\Scripts\python.exe src\pipeline.py --file posts.json`.
 - **Prueba de carga**: `venv\Scripts\python.exe scripts\loadtest.py --n 30`.
+- **Backfill de imágenes** (rellenar `post_image` de posts ya guardados, sin re-cosechar):
+  `venv\Scripts\python.exe scripts\backfill_images.py` (descarga la imagen de cada post
+  desde el embed público; idempotente; los posts solo-texto quedan con el banner del autor).
 - **Tras tocar la extensión**: recargarla en `chrome://extensions` (↻).
 - **Tras tocar `server.py`/`pipeline.py`/`classifier.py`/`claude_code_backend.py`/config**:
   reiniciar el servidor.

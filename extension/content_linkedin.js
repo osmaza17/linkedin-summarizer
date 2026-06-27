@@ -56,6 +56,7 @@ async function harvest(days, person) {
     author: p.author || person.name || '',
     author_url: person.profile_url || '',
     author_avatar: p.author_avatar || '',
+    post_image: p.post_image || '',
     published_at: p.published_at || '',
     group_name: person.group_name || 'LinkedIn',
     group_color: person.group_color || '#0A66C2',
@@ -94,6 +95,7 @@ function extractPosts(person) {
         text,
         author: actorName(el) || person.name || '',
         author_avatar: actorAvatar(el),
+        post_image: postImage(el),
         published_at: dt.published_at,
         publishedMs: dt.publishedMs,
       });
@@ -148,6 +150,21 @@ function actorName(el) {
 function actorAvatar(el) {
   const img = el.querySelector('.update-components-actor__avatar img, img.update-components-actor__avatar-image, .ivm-view-attr__img--centered');
   return img?.src || '';
+}
+
+// Imagen DEL CONTENIDO del post (la del cuerpo), NO la foto de perfil del autor.
+// Busca en los contenedores de imagen/artículo del update; excluye a propósito los
+// selectores del avatar para no volver a coger la foto de perfil. Devuelve '' si el
+// post no lleva imagen (solo texto, vídeo o documento) → la tarjeta cae al banner autor.
+function postImage(el) {
+  const img = el.querySelector(
+    '.update-components-image img, img.update-components-image__image, '
+    + '.feed-shared-image img, .update-components-article__image img, '
+    + '.feed-shared-article__image img'
+  );
+  if (!img) return '';
+  // LinkedIn a veces difiere la URL real en data-delayed-url (lazy-load).
+  return img.getAttribute('src') || img.getAttribute('data-delayed-url') || '';
 }
 
 // Fecha FIABLE a partir del id de actividad: sus bits altos son el Unix time en ms

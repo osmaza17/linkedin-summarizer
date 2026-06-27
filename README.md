@@ -98,6 +98,18 @@ Genera N posts sintéticos (con fecha real codificada en el id) y los mete por e
 para estresar cola/worker/dedup/feed. Los marca con el grupo **TEST** (cada uno **sí**
 llama a Claude).
 
+## Imágenes de los posts en el feed
+
+Cada tarjeta del feed usa como miniatura la **imagen del propio post** (no la foto de
+perfil): se obtiene del **embed público** del post (sin login). Los posts sin imagen
+(solo texto) muestran un banner con el autor. Para rellenar la imagen de posts **ya
+guardados** sin volver a cosechar:
+
+```bash
+venv/Scripts/python.exe scripts/backfill_images.py
+```
+Es idempotente (solo toca las entradas sin imagen) y no llama a Claude.
+
 ## Configuración (`config.json`)
 
 - `linkedin_groups`: grupos de personas (`name`, `public_id`, `profile_url`, `avatar`).

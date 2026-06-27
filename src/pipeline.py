@@ -8,11 +8,13 @@ viene cosechado). Lo usan el servidor (worker de la cola) y la CLI (`python pipe
 from __future__ import annotations
 
 import argparse
+import html as _html
 import json
 import logging
 import os
 import re
 import sys
+import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -75,6 +77,42 @@ def date_from_post_id(post_id: str) -> str:
     return datetime.fromtimestamp(ts_ms / 1000, tz=timezone.utc).astimezone().date().isoformat()
 
 
+# Resolución de la imagen de CONTENIDO de un post desde el embed PÚBLICO de LinkedIn
+# (la misma URL que report_writer mete en el iframe; accesible sin login). Las imágenes
+# del CDN son media.licdn.com/dms/image/v2/<hash>/<token>/...: el <token> dice el tipo.
+_EMBED_IMG_RE = re.compile(r'https://media\.licdn\.com/dms/image/v2/[^/]+/([^/?"\'\s]+)[^"\'\s]*')
+_EMBED_IMG_EXCLUDE = ("profile-displayphoto", "company-logo", "company-background", "ghost")
+_EMBED_IMG_RANK = ("feedshare", "article", "videocover", "image")  # mejor → peor
+
+
+def resolve_post_image(post_id: str, timeout: int = 12) -> str:
+    """Imagen de contenido del post desde el embed público de LinkedIn (sin login).
+
+    Descarta foto de perfil/logos y prefiere la imagen nativa (`feedshare`). Devuelve ""
+    si el post no lleva imagen (solo texto) o si la descarga falla (nunca lanza: que un
+    post no tenga miniatura no debe romper nada)."""
+    if not post_id:
+        return ""
+    url = f"https://www.linkedin.com/embed/feed/update/urn:li:activity:{post_id}"
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        body = urllib.request.urlopen(req, timeout=timeout).read().decode("utf-8", "replace")
+    except Exception:  # noqa: BLE001 - red caída/404/timeout → sin miniatura, no fatal
+        return ""
+    best, best_rank = "", len(_EMBED_IMG_RANK)
+    for m in _EMBED_IMG_RE.finditer(body):
+        full, token = m.group(0), m.group(1)
+        if any(token.startswith(x) for x in _EMBED_IMG_EXCLUDE):
+            continue
+        rank = next((i for i, p in enumerate(_EMBED_IMG_RANK) if token.startswith(p)),
+                    len(_EMBED_IMG_RANK))
+        if rank < best_rank:
+            best, best_rank = _html.unescape(full), rank
+            if rank == 0:
+                break  # feedshare = lo mejor posible, no hace falta seguir
+    return best
+
+
 def _derive_title(text: str, author: str) -> str:
     """Título legible de un post (no tienen título): 1ª línea/frase, recortada."""
     text = (text or "").strip()
@@ -109,6 +147,7 @@ def normalize_post(raw: dict) -> dict | None:
         "author": author,
         "author_url": (raw.get("author_url") or "").strip(),
         "author_avatar": (raw.get("author_avatar") or "").strip(),
+        "post_image": (raw.get("post_image") or "").strip(),
         "group_name": (raw.get("group_name") or "LinkedIn").strip(),
         "group_color": (raw.get("group_color") or DEFAULT_COLOR).strip(),
         "url": url,
@@ -174,6 +213,10 @@ def process_posts(raw_posts: list[dict], settings: dict, client, model: str,
             rejected += 1
             entries.append(rejected_entry(p))
             continue
+        # Si la extensión no capturó la imagen del DOM, la resolvemos desde el embed
+        # público (más fiable que raspar el DOM). '' si el post es solo texto.
+        if not p.get("post_image"):
+            p["post_image"] = resolve_post_image(p["post_id"])
         filename = resolve_filename(p, used_by, existing)
         write_post_newsletter(p, str(reports_path), filename)
         entries.append(index_entry(p, filename))

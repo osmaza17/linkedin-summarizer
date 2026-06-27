@@ -191,6 +191,7 @@ def index_entry(post: dict, filename: str, keep: bool = True) -> dict:
         "author": post.get("author", ""),
         "author_url": post.get("author_url", ""),
         "author_avatar": post.get("author_avatar", ""),
+        "post_image": post.get("post_image", ""),
         "group_name": post.get("group_name") or "LinkedIn",
         "group_color": post.get("group_color") or DEFAULT_COLOR,
         "published_at": post.get("published_at", ""),
