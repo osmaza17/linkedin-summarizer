@@ -10,7 +10,7 @@
 **Aplicación independiente** que recopila posts de **una lista de personas de LinkedIn**,
 los **filtra con IA** (¿es un proyecto que el usuario podría usar?) y genera una newsletter
 HTML por post seleccionado (el **embed** del post). Vive en
-`C:\Users\oscar\linkedin-summarizer\` (carpeta **hermana** de `youtube-summarizer`).
+`C:\Users\oscar\linkedin-summarizer\`.
 
 **Es 100% autónoma** (decisión 2026-06-26: se sacó del repo de YouTube, donde antes era el
 subproyecto `linkedin-prototype/`): su **propio repo Git**, su **propio `venv`** y `.env`,
@@ -58,8 +58,7 @@ Cada cambio en esta app debe actualizar **este `CLAUDE.md`** y, si afecta al uso
 Recopilar los posts de **una lista de personas elegidas**, **filtrar con IA** los que
 presentan un **proyecto que el usuario podría usar**, y generar **una newsletter HTML por
 post seleccionado** (embed del post + texto original de respaldo + etiqueta motivo/
-categoría), catalogadas en un feed web agrupado por día. Pensado para leerlo como el feed
-del proyecto de YouTube, pero para LinkedIn y centrado en proyectos de interés.
+categoría), catalogadas en un feed web agrupado por día. Centrado en proyectos de interés.
 
 Principio de diseño (heredado del padre): **nunca falla de forma ruidosa**. Un post que
 no se puede clasificar se loguea y se reintenta luego; el resto continúa.
@@ -69,7 +68,7 @@ no se puede clasificar se loguea y se reintenta luego; el resto continúa.
 ## Estructura
 
 ```
-linkedin-summarizer/          # app independiente (hermana de youtube-summarizer)
+linkedin-summarizer/          # app independiente
 ├── CLAUDE.md                 # este archivo (fuente de verdad)
 ├── README.md                 # doc orientada al usuario
 ├── config.json               # linkedin_groups (personas) + settings

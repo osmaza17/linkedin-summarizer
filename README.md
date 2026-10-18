@@ -1,10 +1,9 @@
 
 # LinkedIn Summarizer
 
-**Aplicación independiente** (carpeta hermana de `youtube-summarizer`): su propio repo Git,
+**Aplicación independiente**: su propio repo Git,
 su propio `venv` y `.env`, su propio servidor Flask (**puerto 3002**) que sirve un
-**dashboard React propio**, su backend headless y su extensión de Chrome. **No comparte
-nada** con el proyecto de YouTube. El `.env` propio debe tener `ANTHROPIC_API_KEY`.
+**dashboard React propio**, su backend headless y su extensión de Chrome. El `.env` propio debe tener `ANTHROPIC_API_KEY`.
 
 > **Mismo aspecto que el dashboard de YouTube, pero app separada.** La lectura y la
 > configuración se hacen en su **dashboard React** en `http://localhost:3002` (pestañas
@@ -25,8 +24,8 @@ Recopila los posts de **una lista de personas de LinkedIn** que tú eliges, **fi
 IA** los que presentan un **proyecto que podrías usar** (herramienta, librería, app, open
 source…) y genera **una newsletter HTML por post seleccionado** (embed del post + texto
 original de respaldo + etiqueta con el motivo/categoría), catalogadas en un feed web
-agrupado por día. Como el feed del proyecto de YouTube pero **sin transcripción** (un post
-ya es texto) y **filtrando** en vez de resumir. Los posts que no son proyectos se
+agrupado por día. **Sin transcripción** (un post
+ya es texto): **filtra** en vez de resumir. Los posts que no son proyectos se
 descartan (no generan newsletter).
 
 La captura la hace una **extensión de Chrome**: abre **una a una** (secuencial) la
